@@ -188,19 +188,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-_frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:5173')
-
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://localhost:5174",
-    "http://127.0.0.1:5173",
-    "http://127.0.0.1:5174",
-    "https://a8674d6f.e-commerce-demo-frontend.pages.dev",
-]
-
-# Dynamically add FRONTEND_URL if not already in the list
-if _frontend_url and _frontend_url not in CORS_ALLOWED_ORIGINS:
-    CORS_ALLOWED_ORIGINS.append(_frontend_url)
+CORS_ALLOW_ALL_ORIGINS = True
 
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [

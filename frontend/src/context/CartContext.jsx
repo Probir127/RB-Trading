@@ -80,8 +80,10 @@ export const CartProvider = ({ children }) => {
         try {
             // setLoading(true); // Don't flicker loading too much
             const response = await api.get('cart/');
+            // Handle both paginated results and direct array responses defensively
+            const responseData = response.data.results || response.data || [];
             // Transform Backend CartItem (nested product) to Frontend structure
-            const items = response.data.map(item => ({
+            const items = responseData.map(item => ({
                 ...item.product,
                 quantity: item.quantity,
                 cart_item_id: item.id,
@@ -115,11 +117,20 @@ export const CartProvider = ({ children }) => {
             setCartItems(prevItems => {
                 const existingItem = prevItems.find(item => item.id === product.id);
                 if (existingItem) {
+                    const newQty = existingItem.quantity + quantity;
+                    if (newQty > product.stock) {
+                        alert(`Only ${product.stock} items left in stock`);
+                        return prevItems;
+                    }
                     return prevItems.map(item =>
                         item.id === product.id
-                            ? { ...item, quantity: item.quantity + quantity }
+                            ? { ...item, quantity: newQty }
                             : item
                     );
+                }
+                if (quantity > product.stock) {
+                    alert(`Only ${product.stock} items left in stock`);
+                    return prevItems;
                 }
                 return [...prevItems, { ...product, quantity }];
             });
@@ -147,6 +158,12 @@ export const CartProvider = ({ children }) => {
 
     const updateQuantity = async (productId, quantity) => {
         if (quantity < 1) return;
+        
+        const item = cartItems.find(item => item.id === productId);
+        if (!item || quantity > item.stock) {
+            if (item && quantity > item.stock) alert(`Only ${item.stock} items left in stock`);
+            return;
+        }
 
         if (user) {
             try {
@@ -175,12 +192,12 @@ export const CartProvider = ({ children }) => {
 
     const clearCart = async () => {
         if (user) {
-            // For now, we clear local state.
-            // Backend clear happens on checkout success, but if explicit clear needed:
-            // We'd need an endpoint. For now, we assume this is called on Checkout Success
+            // BUG-004 FIX: Do not re-fetch after clearing. fetchCart() was racing
+            // against setCartItems([]) and could repopulate stale server-side cart items
+            // (ghost items) immediately after the user placed an order.
+            // The backend handles cart deletion via the order creation endpoint;
+            // we only need to clear local state here.
             setCartItems([]);
-            // Also refresh from server to be sure
-            fetchCart();
         } else {
             setCartItems([]);
             localStorage.removeItem('cartItems');

@@ -17,11 +17,27 @@ const CategoryPage = () => {
     const searchQuery = searchParams.get('search') || '';
     const [minPrice, setMinPrice] = useState('');
     const [maxPrice, setMaxPrice] = useState('');
+    
+    // BUG-012: Search debounce state
+    const [localSearch, setLocalSearch] = useState(searchQuery);
+
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setSearchParams(prev => {
+                const p = new URLSearchParams(prev);
+                if (localSearch) p.set('search', localSearch);
+                else p.delete('search');
+                return p;
+            });
+        }, 450);
+        return () => clearTimeout(timer);
+    }, [localSearch, setSearchParams]);
+
     // Moved fetch functions up and wrapped in useCallback to avoid infinite loops
     const fetchCategories = useCallback(async () => {
         try {
             const response = await api.get('categories/');
-            setCategories(response.data);
+            setCategories(response.data.results || response.data);
         } catch (error) {
             console.error("Error fetching categories:", error);
         }
@@ -30,7 +46,7 @@ const CategoryPage = () => {
     const fetchBrands = useCallback(async () => {
         try {
             const response = await api.get('brands/');
-            setBrands(response.data);
+            setBrands(response.data.results || response.data);
         } catch (error) {
             console.error("Error fetching brands:", error);
         }
@@ -44,15 +60,15 @@ const CategoryPage = () => {
             if (minPrice) params.price__gte = minPrice;
             if (maxPrice) params.price__lte = maxPrice;
             if (categorySlug) params.category__slug = categorySlug;
+            if (selectedBrands.length === 1) {
+                params.brand__name = selectedBrands[0];
+            } else if (selectedBrands.length > 1) {
+                params.brand__name__in = selectedBrands.join(',');
+            }
 
             const response = await api.get('products/', { params });
-            let fetchedProducts = response.data;
-
-            if (selectedBrands.length > 0) {
-                fetchedProducts = fetchedProducts.filter(p =>
-                    p.brand && selectedBrands.includes(p.brand.name)
-                );
-            }
+            // Handle pagination if backend returns { results: [...] }
+            let fetchedProducts = response.data.results || response.data;
 
             setProducts(fetchedProducts);
             setLoading(false);
@@ -136,13 +152,8 @@ const CategoryPage = () => {
                                     type="text"
                                     className="form-control"
                                     placeholder="Keyword..."
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchParams(prev => {
-                                        const p = new URLSearchParams(prev);
-                                        if (e.target.value) p.set('search', e.target.value);
-                                        else p.delete('search');
-                                        return p;
-                                    })}
+                                    value={localSearch}
+                                    onChange={(e) => setLocalSearch(e.target.value)}
                                 />
                                 <i className="fa-solid fa-search" style={{ position: 'absolute', right: '15px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}></i>
                             </div>
@@ -254,6 +265,7 @@ const CategoryPage = () => {
                             <button
                                 onClick={() => {
                                     setSearchParams({});
+                                    setLocalSearch('');
                                     setMinPrice('');
                                     setMaxPrice('');
                                     setSelectedBrands([]);

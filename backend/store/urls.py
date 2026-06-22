@@ -18,7 +18,7 @@ urlpatterns = [
     # Custom JWT endpoint that accepts email instead of username
     path('api/auth/jwt/create/', EmailTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/auth/', include('djoser.urls')),
-    path('api/auth/jwt/refresh/', include('djoser.urls.jwt')),
+    path('api/auth/', include('djoser.urls.jwt')),
     # Email Verification endpoints
     path('api/auth/send-verification/', api_views.SendVerificationCodeView.as_view(), name='send_verification'),
     path('api/auth/verify-email/', api_views.VerifyCodeView.as_view(), name='verify_email'),

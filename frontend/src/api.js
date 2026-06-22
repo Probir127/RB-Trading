@@ -2,7 +2,7 @@ import axios from 'axios';
 import { jwtDecode } from 'jwt-decode';
 
 const api = axios.create({
-    baseURL: 'http://127.0.0.1:8000/api/',
+    baseURL: import.meta.env.VITE_API_URL || '/api/',
 });
 
 // Request interceptor: attach JWT token
@@ -50,7 +50,7 @@ api.interceptors.response.use(
             if (tokens?.refresh) {
                 try {
                     // Use fresh axios instance to avoid infinite loops
-                    const refreshResponse = await axios.post('http://127.0.0.1:8000/api/auth/jwt/refresh/', {
+                    const refreshResponse = await axios.post(`${import.meta.env.VITE_API_URL || '/api/'}auth/jwt/refresh/`, {
                         refresh: tokens.refresh,
                     });
 

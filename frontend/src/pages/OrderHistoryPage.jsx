@@ -13,7 +13,7 @@ const OrderHistoryPage = () => {
         const fetchOrders = async () => {
             try {
                 const response = await api.get('orders/');
-                setOrders(response.data);
+                setOrders(response.data.results || response.data);
                 setLoading(false);
             } catch (error) {
                 console.error("Error fetching orders:", error);
@@ -26,7 +26,7 @@ const OrderHistoryPage = () => {
         } else {
             setLoading(false);
         }
-    }, [user, setOrders, setLoading]);
+    }, [user]);
 
     if (loading) return (
         <div className="container" style={{ padding: '60px 0' }}>
@@ -74,7 +74,13 @@ const OrderHistoryPage = () => {
                                 </div>
                             </div>
                             <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-                                <div className={`badge ${order.status === 'delivered' ? 'badge-success' : 'badge-info'}`}>
+                                <div className={`badge ${{
+                                    delivered: 'badge-success',
+                                    shipped: 'badge-info',
+                                    processing: 'badge-warning',
+                                    pending: 'badge-warning',
+                                    cancelled: 'badge-error'
+                                }[order.status] || 'badge-info'}`}>
                                     {order.status || 'Processing'}
                                 </div>
                                 <span style={{ fontWeight: 700, fontSize: '1.2rem', color: 'var(--primary-color)' }}>

@@ -16,8 +16,8 @@ const HomePage = () => {
                     api.get('products/'),
                     api.get('categories/')
                 ]);
-                setProducts(prodRes.data);
-                setCategories(catRes.data);
+                setProducts(prodRes.data.results || prodRes.data);
+                setCategories(catRes.data.results || catRes.data);
                 setLoading(false);
             } catch (error) {
                 console.error("Error fetching data:", error);
@@ -28,12 +28,15 @@ const HomePage = () => {
         fetchData();
     }, []);
 
-    const featuredProducts = products.filter(p => p.featured).slice(0, 5);
-    const specialOffers = products.filter(p => p.has_discount);
-    const newArrivals = products.slice(0, 8); // Assuming backend returns newest first or mix
+    // TODO: BUG-025 - Consider adding a dedicated /api/homepage/ endpoint in the future 
+    // to prevent fetching the entire products list upfront. 
+    // For now, optimizing client-side rendering with useMemo.
+    const featuredProducts = React.useMemo(() => products.filter(p => p.featured).slice(0, 5), [products]);
+    const specialOffers = React.useMemo(() => products.filter(p => p.has_discount), [products]);
+    const newArrivals = React.useMemo(() => products.slice(0, 8), [products]); // Assuming backend returns newest first or mix
 
     // Slider uses featured or fallback
-    const sliderProducts = featuredProducts.length > 0 ? featuredProducts : products.slice(0, 3);
+    const sliderProducts = React.useMemo(() => featuredProducts.length > 0 ? featuredProducts : products.slice(0, 3), [featuredProducts, products]);
 
     return (
         <>
@@ -95,7 +98,7 @@ const HomePage = () => {
                         </div>
 
                         <div style={{ textAlign: 'center', marginTop: '50px' }}>
-                            <Link to="/category?filter=sale" className="btn btn-outline" style={{ padding: '15px 40px' }}>View All Offers</Link>
+                            <Link to="/category" className="btn btn-outline" style={{ padding: '15px 40px' }}>View All Products</Link>
                         </div>
                     </div>
                 )}

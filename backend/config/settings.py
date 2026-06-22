@@ -32,14 +32,18 @@ LOGOUT_REDIRECT_URL = 'store:index'
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
+from django.core.exceptions import ImproperlyConfigured
+
 # SECURITY WARNING: keep the secret key used in production secret!
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-+d#ly@uf_k2)+64=sw^ol(1@&+)&cjrr&*#6a8eq-#g%!acb6s')
+_secret = os.getenv('SECRET_KEY')
+if not _secret:
+    raise ImproperlyConfigured("SECRET_KEY environment variable is not set.")
+SECRET_KEY = _secret
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DEBUG', 'True') == 'True'
+DEBUG = os.getenv('DEBUG', 'False') == 'True'
 
-ALLOWED_HOSTS = ['*', '.ngrok-free.dev', '.ngrok-free.app', '.ngrok.io', 'stick-gen-boundary-alloy.trycloudflare.com']
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,.ngrok-free.dev,.ngrok-free.app,.ngrok.io,stick-gen-boundary-alloy.trycloudflare.com').split(',')
 
 CSRF_TRUSTED_ORIGINS = [
     'https://*.ngrok-free.dev', 
@@ -198,6 +202,8 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 20,
 }
 
 SIMPLE_JWT = {
@@ -299,6 +305,9 @@ SSLCOMMERZ_STORE_ID = os.getenv('SSLCOMMERZ_STORE_ID', 'testbox')
 SSLCOMMERZ_STORE_PASS = os.getenv('SSLCOMMERZ_STORE_PASS', 'qwerty')
 SSLCOMMERZ_IS_SANDBOX = os.getenv('SSLCOMMERZ_IS_SANDBOX', 'True') == 'True'  # Set to False in .env for production
 
+if not SSLCOMMERZ_IS_SANDBOX and SSLCOMMERZ_STORE_ID == 'testbox':
+    raise ImproperlyConfigured("Real SSLCommerz credentials must be set for production.")
+
 # Email Configuration
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
@@ -312,3 +321,10 @@ DEFAULT_FROM_EMAIL = os.getenv('EMAIL_HOST_USER', 'noreply@rbtrading.com')
 
 # Frontend URL for callbacks (e.g. Payment Gateway)
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')
+
+# Security settings for production
+if not DEBUG:
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 31536000

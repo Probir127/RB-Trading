@@ -4,6 +4,7 @@ from django.utils.text import slugify
 from django.urls import reverse
 from django.utils.safestring import mark_safe
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 
 class Category(models.Model):
     name = models.CharField(max_length=200)
@@ -160,30 +161,6 @@ class OrderItem(models.Model):
 
 class SiteSettings(models.Model):
     """Singleton model for site-wide settings"""
-    email_host_user = models.CharField(
-        max_length=255, 
-        help_text="Your Gmail address (e.g., yourname@gmail.com). Acts as the sender."
-    )
-    email_host_password = models.CharField(
-        max_length=255, 
-        help_text="Your 16-character App Password. Go to Google Account > Security > 2-Step Verification > App Passwords to generate one."
-    )
-    
-    # SSLCommerz Payment Gateway Settings
-    sslcommerz_store_id = models.CharField(
-        max_length=100, 
-        blank=True,
-        help_text="SSLCommerz Store ID (for production use real credentials)"
-    )
-    sslcommerz_store_pass = models.CharField(
-        max_length=200, 
-        blank=True,
-        help_text="SSLCommerz Store Password"
-    )
-    sslcommerz_is_sandbox = models.BooleanField(
-        default=True,
-        help_text="Enable sandbox mode for testing"
-    )
 
     # Public Contact Info (For Footer/Contact Page)
     site_name = models.CharField(max_length=100, default="RB Trading")
@@ -203,7 +180,7 @@ class SiteSettings(models.Model):
     def save(self, *args, **kwargs):
         # Ensure only one instance exists
         if not self.pk and SiteSettings.objects.exists():
-            return
+            raise ValidationError('There can be only one SiteSettings instance')
         return super().save(*args, **kwargs)
 
     def __str__(self):

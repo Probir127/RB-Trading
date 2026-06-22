@@ -42,7 +42,7 @@ const ProductPage = () => {
     };
 
     if (loading) return (
-        <div className="container" style={{ padding: '80px 0', display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '60px' }}>
+        <div className="container product-layout" style={{ padding: '80px 0', display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '60px' }}>
             <div className="skeleton" style={{ height: '500px' }}></div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 <div className="skeleton" style={{ height: '40px', width: '70%' }}></div>

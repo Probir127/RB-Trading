@@ -338,7 +338,7 @@ class FinancialReportAdmin(admin.ModelAdmin):
 
 @admin.register(SiteSettings)
 class SiteSettingsAdmin(admin.ModelAdmin):
-    list_display = ['__str__', 'email_host_user']
+    list_display = ['__str__']
     
     def has_add_permission(self, request):
         # Only allow adding if no instance exists

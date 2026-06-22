@@ -38,8 +38,9 @@ const ProductCard = ({ product }) => {
                         left: 0,
                         width: '100%',
                         height: '100%',
-                        objectFit: 'cover',
-                        transition: 'transform 0.5s ease'
+                        objectFit: 'contain',
+                        transition: 'transform 0.5s ease',
+                        backgroundColor: '#fff'
                     }}
                     className="product-img"
                 />
@@ -121,12 +122,6 @@ const ProductCard = ({ product }) => {
                 </div>
             </div>
 
-            <style>{`
-                .card:hover .product-img { transform: scale(1.05); }
-                .card:hover .overlay { opacity: 1; }
-                .card:hover .overlay span { transform: translateY(0); }
-                .btn-icon:hover { background: var(--primary-color); color: white; border-color: var(--primary-color); }
-            `}</style>
         </div>
     );
 };

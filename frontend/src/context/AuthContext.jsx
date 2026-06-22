@@ -98,37 +98,40 @@ export const AuthProvider = ({ children }) => {
     }, [authTokens, logoutUser]);
 
     useEffect(() => {
-        if (loading) {
-            setLoading(false);
-        }
-    }, [loading]);
+        let timer;
+        const checkAuth = async () => {
+            if (authTokens) {
+                try {
+                    const decoded = jwtDecode(authTokens.access);
+                    const isExpired = decoded.exp < Date.now() / 1000;
 
-    useEffect(() => {
-        if (authTokens) {
-            try {
-                const decoded = jwtDecode(authTokens.access);
-                const isExpired = decoded.exp < Date.now() / 1000;
-
-                if (isExpired) {
-                    updateToken();
-                } else {
-                    // Refresh 2 minutes before expiry
-                    const timeUntilExpiry = (decoded.exp * 1000) - Date.now() - (1000 * 60 * 2);
-
-                    if (timeUntilExpiry > 0) {
-                        const timer = setTimeout(() => {
-                            updateToken();
-                        }, timeUntilExpiry);
-                        return () => clearTimeout(timer);
+                    if (isExpired) {
+                        await updateToken();
                     } else {
-                        updateToken();
+                        // Refresh 2 minutes before expiry
+                        const timeUntilExpiry = (decoded.exp * 1000) - Date.now() - (1000 * 60 * 2);
+
+                        if (timeUntilExpiry > 0) {
+                            timer = setTimeout(() => {
+                                updateToken();
+                            }, timeUntilExpiry);
+                        } else {
+                            await updateToken();
+                        }
                     }
+                } catch (e) {
+                    console.error("JWT decode failed:", e);
+                    logoutUser();
                 }
-            } catch (e) {
-                console.error("JWT decode failed:", e);
-                logoutUser();
             }
-        }
+            setLoading(false);
+        };
+
+        checkAuth();
+
+        return () => {
+            if (timer) clearTimeout(timer);
+        };
     }, [authTokens, updateToken, logoutUser]);
 
     const contextData = {

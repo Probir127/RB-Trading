@@ -1,7 +1,11 @@
 from rest_framework import viewsets, permissions, filters, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
 from django_filters.rest_framework import DjangoFilterBackend
+
+class AuthRateThrottle(AnonRateThrottle):
+    rate = '5/hour'
 from django.shortcuts import get_object_or_404, redirect
 from django.conf import settings
 from django.urls import reverse
@@ -27,26 +31,19 @@ from .serializers_settings import SiteSettingsSerializer
 
 
 # ---------------------------------------------------------------------------
-# Utility: Get email connection from SiteSettings or fallback to settings.py
+# Utility: Get email connection from settings.py
 # ---------------------------------------------------------------------------
 def _get_email_connection():
-    """Return (from_email, connection) tuple using SiteSettings or Django settings."""
-    site_settings = SiteSettings.objects.first()
-    connection = None
-    from_email = settings.EMAIL_HOST_USER
-
-    if site_settings and site_settings.email_host_user and site_settings.email_host_password:
-        from_email = site_settings.email_host_user
-        connection = get_connection(
-            backend='django.core.mail.backends.smtp.EmailBackend',
-            host='smtp.gmail.com',
-            port=587,
-            username=site_settings.email_host_user,
-            password=site_settings.email_host_password,
-            use_tls=True,
-        )
-
-    return from_email, connection
+    """Return (from_email, connection) tuple using Django settings."""
+    connection = get_connection(
+        backend=getattr(settings, 'EMAIL_BACKEND', 'django.core.mail.backends.smtp.EmailBackend'),
+        host=getattr(settings, 'EMAIL_HOST', 'smtp.gmail.com'),
+        port=getattr(settings, 'EMAIL_PORT', 587),
+        username=settings.EMAIL_HOST_USER,
+        password=settings.EMAIL_HOST_PASSWORD,
+        use_tls=getattr(settings, 'EMAIL_USE_TLS', True),
+    )
+    return settings.EMAIL_HOST_USER, connection
 
 
 # ===========================================================================
@@ -57,22 +54,24 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
     permission_classes = [permissions.AllowAny]
+    pagination_class = None
 
 
 class BrandViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Brand.objects.all()
     serializer_class = BrandSerializer
     permission_classes = [permissions.AllowAny]
+    pagination_class = None
 
 
 class ProductViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Product.objects.filter(available=True)
+    queryset = Product.objects.filter(available=True).select_related('category', 'brand')
     serializer_class = ProductSerializer
     permission_classes = [permissions.AllowAny]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = {
         'category__slug': ['exact'],
-        'brand__name': ['exact'],
+        'brand__name': ['exact', 'in'],
         'price': ['gte', 'lte'],
     }
     search_fields = ['name', 'description', 'category__name', 'brand__name']
@@ -99,9 +98,10 @@ class SiteSettingsView(APIView):
 class CartViewSet(viewsets.ModelViewSet):
     serializer_class = CartItemSerializer
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None
 
     def get_queryset(self):
-        return CartItem.objects.filter(user=self.request.user)
+        return CartItem.objects.filter(user=self.request.user).select_related('product')
 
     def create(self, request, *args, **kwargs):
         product_id = request.data.get('product_id')
@@ -137,7 +137,7 @@ class OrderViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return Order.objects.filter(user=self.request.user)
+        return Order.objects.filter(user=self.request.user).prefetch_related('items__product')
 
     # ----- helpers -----
     @staticmethod
@@ -233,10 +233,17 @@ class OrderViewSet(viewsets.ModelViewSet):
                         purchase_price=item.product.purchase_price,
                     )
 
-                    item.product.stock -= item.quantity
-                    item.product.save()
+                    # BUG-002 FIX: Only deduct stock immediately for COD.
+                    # For SSLCommerz, stock deduction is deferred to SSLCommerzSuccessView
+                    # so that abandoned/failed payments never permanently lose inventory.
+                    if payment_method == 'cod':
+                        item.product.stock -= item.quantity
+                        item.product.save()
 
-                cart_items.delete()
+                # BUG-002 FIX: Only delete cart immediately for COD.
+                # For SSLCommerz, cart is deleted in SSLCommerzSuccessView after payment confirmation.
+                if payment_method == 'cod':
+                    cart_items.delete()
 
                 response_data = self.get_serializer(order).data
 
@@ -256,23 +263,9 @@ class OrderViewSet(viewsets.ModelViewSet):
                     try:
                         from sslcommerz_lib import SSLCOMMERZ
 
-                        # Prefer SiteSettings, fallback to settings.py
-                        site_settings = SiteSettings.objects.first()
-                        store_id = (
-                            site_settings.sslcommerz_store_id
-                            if site_settings and site_settings.sslcommerz_store_id
-                            else getattr(settings, 'SSLCOMMERZ_STORE_ID', 'testbox')
-                        )
-                        store_pass = (
-                            site_settings.sslcommerz_store_pass
-                            if site_settings and site_settings.sslcommerz_store_pass
-                            else getattr(settings, 'SSLCOMMERZ_STORE_PASS', 'qwerty')
-                        )
-                        is_sandbox = (
-                            site_settings.sslcommerz_is_sandbox
-                            if site_settings
-                            else getattr(settings, 'SSLCOMMERZ_IS_SANDBOX', True)
-                        )
+                        store_id = getattr(settings, 'SSLCOMMERZ_STORE_ID', 'testbox')
+                        store_pass = getattr(settings, 'SSLCOMMERZ_STORE_PASS', 'qwerty')
+                        is_sandbox = getattr(settings, 'SSLCOMMERZ_IS_SANDBOX', True)
 
                         sslcz = SSLCOMMERZ({
                             'store_id': store_id,
@@ -361,22 +354,9 @@ class SSLCommerzSuccessView(APIView):
         try:
             from sslcommerz_lib import SSLCOMMERZ
 
-            site_settings = SiteSettings.objects.first()
-            store_id = (
-                site_settings.sslcommerz_store_id
-                if site_settings and site_settings.sslcommerz_store_id
-                else getattr(settings, 'SSLCOMMERZ_STORE_ID', 'testbox')
-            )
-            store_pass = (
-                site_settings.sslcommerz_store_pass
-                if site_settings and site_settings.sslcommerz_store_pass
-                else getattr(settings, 'SSLCOMMERZ_STORE_PASS', 'qwerty')
-            )
-            is_sandbox = (
-                site_settings.sslcommerz_is_sandbox
-                if site_settings
-                else getattr(settings, 'SSLCOMMERZ_IS_SANDBOX', True)
-            )
+            store_id = getattr(settings, 'SSLCOMMERZ_STORE_ID', 'testbox')
+            store_pass = getattr(settings, 'SSLCOMMERZ_STORE_PASS', 'qwerty')
+            is_sandbox = getattr(settings, 'SSLCOMMERZ_IS_SANDBOX', True)
 
             sslcz = SSLCOMMERZ({
                 'store_id': store_id,
@@ -392,10 +372,25 @@ class SSLCommerzSuccessView(APIView):
             # Log but proceed — sandbox may not always validate
             print(f"SSLCommerz validation warning: {e}")
 
-        order.payment_status = 'paid'
-        order.status = 'processing'
-        order.save()
+        # BUG-002 FIX: Deduct stock here (on confirmed payment) instead of at order creation.
+        # This ensures stock is only reduced for orders that were actually paid.
+        with transaction.atomic():
+            for order_item in order.items.all():
+                product = order_item.product
+                if order_item.quantity > product.stock:
+                    # Edge case: stock depleted between order creation and payment (e.g. two simultaneous buyers).
+                    # Mark order as needs_review so admin can resolve manually.
+                    order.status = 'needs_review'
+                    order.save()
+                    return redirect(f"{frontend_url}/payment/success?order_id={order.id}&warning=stock_issue")
+                product.stock -= order_item.quantity
+                product.save()
 
+            order.payment_status = 'paid'
+            order.status = 'processing'
+            order.save()
+
+        # Cart is still intact at this point (not deleted at creation for SSLCommerz).
         CartItem.objects.filter(user=order.user).delete()
 
         return redirect(f"{frontend_url}/payment/success?order_id={order.id}")
@@ -410,13 +405,17 @@ class SSLCommerzFailView(APIView):
         tran_id = request.data.get('tran_id') or request.POST.get('tran_id')
         frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:5173')
 
-        # Mark order as failed if we can find it
+        # Mark order as failed if we can find it.
+        # BUG-002 FIX: No stock restore needed here — stock was never deducted
+        # for SSLCommerz orders at creation time. Cart remains intact so the user
+        # can retry checkout.
         if tran_id:
             try:
                 order_id = int(tran_id.split('-')[1])
                 order = Order.objects.get(id=order_id, payment_intent_id=tran_id)
-                order.payment_status = 'failed'
-                order.save()
+                if order.payment_status == 'pending':
+                    order.payment_status = 'failed'
+                    order.save()
             except (ValueError, IndexError, Order.DoesNotExist):
                 pass
 
@@ -429,7 +428,24 @@ class SSLCommerzCancelView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
+        tran_id = request.data.get('tran_id') or request.POST.get('tran_id')
         frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:5173')
+        
+        # Mark order as cancelled if we can find it.
+        # BUG-002 FIX: No stock restore needed here — stock was never deducted
+        # for SSLCommerz orders at creation time. Cart remains intact so the user
+        # can retry or continue shopping.
+        if tran_id:
+            try:
+                order_id = int(tran_id.split('-')[1])
+                order = Order.objects.get(id=order_id, payment_intent_id=tran_id)
+                if order.payment_status == 'pending':
+                    order.payment_status = 'cancelled'
+                    order.status = 'cancelled'
+                    order.save()
+            except (ValueError, IndexError, Order.DoesNotExist):
+                pass
+
         return redirect(f'{frontend_url}/cart?status=cancelled')
 
 
@@ -440,18 +456,18 @@ class SSLCommerzCancelView(APIView):
 class SendVerificationCodeView(APIView):
     """Send a 6-digit verification code to user's email."""
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [AuthRateThrottle]
 
     def post(self, request):
         email = request.data.get('email')
         if not email:
             return Response({'error': 'Email is required'}, status=400)
 
-        try:
-            user = User.objects.get(email=email)
-            if user.is_active:
-                return Response({'error': 'Account is already verified'}, status=400)
-        except User.DoesNotExist:
+        user = User.objects.filter(email=email).first()
+        if not user:
             return Response({'error': 'No account found with this email'}, status=404)
+        if user.is_active:
+            return Response({'error': 'Account is already verified'}, status=400)
 
         code = ''.join(random.choices(string.digits, k=6))
         VerificationCode.objects.filter(email=email).delete()
@@ -473,8 +489,7 @@ class SendVerificationCodeView(APIView):
             print(f"[ERROR] Email send failed: {e}")
             print(f"[DEV] Verification code for {email}: {code}")
             return Response({
-                'message': 'Verification code sent (check console in dev mode)',
-                'dev_code': code if settings.DEBUG else None,
+                'message': 'Verification code sent (check console in dev mode)'
             })
 
 
@@ -498,12 +513,12 @@ class VerifyCodeView(APIView):
             verification.delete()
             return Response({'error': 'Verification code has expired'}, status=400)
 
-        try:
-            user = User.objects.get(email=email)
-            user.is_active = True
-            user.save()
-        except User.DoesNotExist:
+        user = User.objects.filter(email=email).first()
+        if not user:
             return Response({'error': 'User not found'}, status=404)
+        
+        user.is_active = True
+        user.save()
 
         verification.delete()
         return Response({'message': 'Email verified successfully! You can now login.'})
@@ -516,15 +531,15 @@ class VerifyCodeView(APIView):
 class RequestPasswordResetView(APIView):
     """Send a 6-digit code for password reset."""
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [AuthRateThrottle]
 
     def post(self, request):
         email = request.data.get('email')
         if not email:
             return Response({'error': 'Email is required'}, status=400)
 
-        try:
-            User.objects.get(email=email)
-        except User.DoesNotExist:
+        user = User.objects.filter(email=email).first()
+        if not user:
             return Response({'error': 'No account found with this email'}, status=404)
 
         code = ''.join(random.choices(string.digits, k=6))
@@ -547,8 +562,7 @@ class RequestPasswordResetView(APIView):
             print(f"[ERROR] Email send failed: {e}")
             print(f"[DEV] Reset code for {email}: {code}")
             return Response({
-                'message': 'Code sent (check console in dev mode)',
-                'dev_code': code if settings.DEBUG else None,
+                'message': 'Code sent (check console in dev mode)'
             })
 
 
@@ -573,11 +587,12 @@ class ResetPasswordView(APIView):
             verification.delete()
             return Response({'error': 'Code has expired'}, status=400)
 
-        try:
-            user = User.objects.get(email=email)
-            user.set_password(new_password)
-            user.save()
-            verification.delete()
-            return Response({'message': 'Password reset successful! Please login.'})
-        except User.DoesNotExist:
+        user = User.objects.filter(email=email).first()
+        if not user:
             return Response({'error': 'User not found'}, status=404)
+            
+        user.set_password(new_password)
+        user.is_active = True
+        user.save()
+        verification.delete()
+        return Response({'message': 'Password reset successful! Please login.'})

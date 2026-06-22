@@ -22,6 +22,7 @@
     /* White Surface */
 
     --text-main: #0f172a;
+    --text-secondary: #475569; /* BUG-029 FIX: was undefined; used by CartPage, CheckoutPage, ProductPage */
     --text-muted: #64748b;
     --text-light: #94a3b8;
 
@@ -50,6 +51,7 @@
 
     /* Transitions */
     --transition-fast: 0.15s ease;
+    --transition-medium: 0.4s ease;
     --transition-normal: 0.3s ease;
     --transition-slow: 0.5s ease;
 }
@@ -487,6 +489,20 @@ h3 {
 
     .hide-mobile {
         display: none;
+    }
+
+    /* BUG-010 FIX: Checkout and Cart two-column grid collapses to single column on mobile.
+       Form/items render first (natural DOM order), summary sidebar stacks below. */
+    .checkout-layout,
+    .cart-layout {
+        grid-template-columns: 1fr !important;
+        gap: 30px !important;
+    }
+
+    /* Un-stick the sidebar so it doesn't overlap content when stacked */
+    .checkout-layout > div:last-child,
+    .cart-layout > div:last-child {
+        position: static !important;
     }
 }
 

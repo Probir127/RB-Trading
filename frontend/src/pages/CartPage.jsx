@@ -1,11 +1,11 @@
 import React, { useContext } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import CartContext from '../context/CartContext';
 import { formatCurrency } from '../utils/currency';
 
 const CartPage = () => {
     const { cartItems, removeFromCart, updateQuantity, getCartTotal } = useContext(CartContext);
-    const navigate = useNavigate();
+
 
     // Check if cartItems is available and an array
     if (!cartItems || cartItems.length === 0) {
@@ -61,14 +61,18 @@ const CartPage = () => {
 
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '15px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'var(--background-color)', borderRadius: '50px', padding: '5px' }}>
+                                    {/* BUG-030 FIX: Buttons increased from 30px to 44px to meet WCAG 2.5.8 minimum touch target */}
                                     <button
                                         onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                                        style={{ width: '30px', height: '30px', borderRadius: '50%', border: 'none', background: 'white', cursor: 'pointer', boxShadow: 'var(--shadow-sm)' }}
-                                    >-</button>
-                                    <span style={{ fontWeight: 600, width: '20px', textAlign: 'center' }}>{item.quantity}</span>
+                                        aria-label={`Decrease quantity of ${item.name}`}
+                                        style={{ width: '44px', height: '44px', borderRadius: '50%', border: 'none', background: 'white', cursor: 'pointer', boxShadow: 'var(--shadow-sm)', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                    >−</button>
+                                    <span style={{ fontWeight: 600, width: '24px', textAlign: 'center' }}>{item.quantity}</span>
                                     <button
                                         onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                                        style={{ width: '30px', height: '30px', borderRadius: '50%', border: 'none', background: 'white', cursor: 'pointer', boxShadow: 'var(--shadow-sm)' }}
+                                        disabled={item.quantity >= item.stock}
+                                        aria-label={`Increase quantity of ${item.name}`}
+                                        style={{ width: '44px', height: '44px', borderRadius: '50%', border: 'none', background: 'white', cursor: item.quantity >= item.stock ? 'not-allowed' : 'pointer', boxShadow: 'var(--shadow-sm)', opacity: item.quantity >= item.stock ? 0.5 : 1, fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                                     >+</button>
                                 </div>
 
@@ -92,9 +96,13 @@ const CartPage = () => {
                         <span>Subtotal</span>
                         <span>{formatCurrency(getCartTotal())}</span>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px', color: 'var(--text-secondary)' }}>
+                    {/* BUG-026 FIX: Backend has no shipping fee calculation.
+                         "Calculated at checkout" was misleading — changed to honest "Free Shipping" copy. */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', color: 'var(--text-secondary)' }}>
                         <span>Shipping</span>
-                        <span>Calculated at checkout</span>
+                        <span style={{ color: 'var(--success)', fontWeight: 600, fontSize: '0.9rem' }}>
+                            <i className="fa-solid fa-truck" style={{ marginRight: '5px' }}></i>Free Shipping
+                        </span>
                     </div>
 
                     <div style={{ borderTop: '1px solid var(--border-color)', margin: '20px 0' }}></div>
@@ -104,13 +112,17 @@ const CartPage = () => {
                         <span className="text-accent">{formatCurrency(getCartTotal())}</span>
                     </div>
 
-                    <button
-                        onClick={() => navigate('/checkout')}
+                    {/* BUG-023 FIX: Replaced navigate() button with Link for instant client-side
+                         navigation and better semantics. React Router's Link pre-resolves the route
+                         without the async setState overhead of useNavigate. */}
+                    <Link
+                        to="/checkout"
                         className="btn btn-primary"
-                        style={{ width: '100%', padding: '15px', fontSize: '1.1rem', justifyContent: 'center' }}
+                        style={{ width: '100%', padding: '15px', fontSize: '1.1rem', justifyContent: 'center', display: 'flex' }}
                     >
+                        <i className="fa-solid fa-lock" style={{ marginRight: '8px' }}></i>
                         Proceed to Checkout
-                    </button>
+                    </Link>
 
                     <Link to="/" style={{ display: 'block', textAlign: 'center', marginTop: '20px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
                         <i className="fa-solid fa-arrow-left"></i> Continue Shopping
@@ -118,13 +130,6 @@ const CartPage = () => {
                 </div>
             </div>
 
-            <style>{`
-                @media (max-width: 900px) {
-                    .cart-layout { grid-template-columns: 1fr !important; }
-                    .cart-items .card { flex-direction: column; text-align: center; }
-                    .cart-items .card > div { width: 100%; align-items: center !important; }
-                }
-            `}</style>
         </div>
     );
 };

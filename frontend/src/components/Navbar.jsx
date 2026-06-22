@@ -54,11 +54,27 @@ const Navbar = () => {
                 </Link>
 
                 {/* Mobile Menu Toggle */}
-                <div className="menu-toggle" onClick={toggleMenu}>
+                <div 
+                    className="menu-toggle" 
+                    onClick={toggleMenu} 
+                    style={{ zIndex: 1000 }}
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Toggle mobile menu"
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') toggleMenu(); }}
+                >
                     <i className={`fa-solid ${mobileMenuOpen ? 'fa-times' : 'fa-bars'}`}></i>
                 </div>
 
-                <div className={`navbar-menu ${mobileMenuOpen ? 'active' : ''}`}>
+                {/* Mobile Menu Backdrop */}
+                {mobileMenuOpen && (
+                    <div 
+                        onClick={() => setMobileMenuOpen(false)}
+                        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 998 }}
+                    />
+                )}
+
+                <div className={`navbar-menu ${mobileMenuOpen ? 'active' : ''}`} style={{ zIndex: 999 }}>
                     {/* Search Bar */}
                     <form onSubmit={handleSearch} className="search-bar">
                         <input
@@ -67,7 +83,7 @@ const Navbar = () => {
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                         />
-                        <button type="submit">
+                        <button type="submit" aria-label="Search">
                             <i className="fa-solid fa-search"></i>
                         </button>
                     </form>
@@ -94,7 +110,7 @@ const Navbar = () => {
                         )}
 
                         <li>
-                            <NavLink to="/cart" className="cart-icon">
+                            <NavLink to="/cart" className="cart-icon" aria-label="View Cart">
                                 <i className="fa-solid fa-shopping-cart"></i>
                                 {getCartCount() > 0 && <span className="cart-badge">{getCartCount()}</span>}
                             </NavLink>

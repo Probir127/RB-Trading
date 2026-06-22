@@ -45,12 +45,19 @@ DEBUG = os.getenv('DEBUG', 'False') == 'True'
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,.ngrok-free.dev,.ngrok-free.app,.ngrok.io,stick-gen-boundary-alloy.trycloudflare.com').split(',')
 
+render_external_hostname = os.getenv('RENDER_EXTERNAL_HOSTNAME')
+if render_external_hostname:
+    ALLOWED_HOSTS.append(render_external_hostname)
+
 CSRF_TRUSTED_ORIGINS = [
     'https://*.ngrok-free.dev', 
     'https://*.ngrok-free.app',
     'https://*.ngrok.io',
     'https://stick-gen-boundary-alloy.trycloudflare.com'
 ]
+
+if render_external_hostname:
+    CSRF_TRUSTED_ORIGINS.append(f'https://{render_external_hostname}')
 
 # Essential for ngrok/proxies: Trust X-Forwarded-Proto header to know we are on HTTPS
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
